@@ -1,11 +1,11 @@
-# --- core pins (NumPy 1.x for torch 2.2.x) ---
+# Keep NumPy < 2 for Torch 2.2.x
 numpy==1.26.4
 
-# --- torch stack (CPU) ---
+# Torch CPU wheels
 torch==2.2.2
 torchvision==0.17.2
 
-# --- ultralytics + web ---
+# Ultralytics + API
 ultralytics==8.3.33
 flask==3.0.3
 flask-cors==4.0.0
