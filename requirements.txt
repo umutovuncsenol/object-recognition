@@ -1,14 +1,14 @@
-# Keep NumPy < 2 for Torch 2.2.x
-numpy==1.26.4
-
-# Torch CPU wheels
-torch==2.2.2
-torchvision==0.17.2
-
-# Ultralytics + API
-ultralytics==8.3.33
-flask==3.0.3
+# web
+Flask==3.0.3
 flask-cors==4.0.0
 gunicorn==21.2.0
-pillow==10.3.0
+
+# yolo stack
+ultralytics==8.3.33
 opencv-python-headless==4.9.0.80
+numpy==1.26.4
+
+# torch CPU-only (lighter + compatible with numpy 1.26.x)
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.2.2+cpu
+torchvision==0.17.2+cpu
