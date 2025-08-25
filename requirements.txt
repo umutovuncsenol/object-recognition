@@ -1,0 +1,5 @@
+flask==3.0.3
+flask-cors==4.0.0
+ultralytics==8.3.33
+torch==2.2.2
+gunicorn==21.2.0
