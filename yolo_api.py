@@ -1,69 +1,60 @@
-from pathlib import Path
 from flask import Flask, request, jsonify
-from ultralytics import YOLO
 from flask_cors import CORS
-import tempfile
+from PIL import Image
+import io, os
 import torch
 
-# ---------- Config ----------
-MODEL_PATH = Path("yolov8n.pt")
-CONFIDENCE = 0.50
+CONFIDENCE = 0.5
 IMAGE_SIZE = 640
 
-if torch.backends.mps.is_available():
-    DEVICE = "mps"
-elif torch.cuda.is_available():
-    DEVICE = "cuda"
-else:
-    DEVICE = "cpu"
-# ----------------------------
+# keep CPU on Render free; also reduce threads for RAM/CPU
+DEVICE = "cpu"
+torch.set_num_threads(1)
+os.environ["OMP_NUM_THREADS"] = "1"
 
 app = Flask(__name__)
-CORS(app)  # allow calls from your separate index.html
+CORS(app)
 
-# Load once at startup
-model = YOLO(MODEL_PATH.as_posix())
-CLASS_NAMES = model.names  # dict: id -> label
+model = None
+CLASS_NAMES = None
+
+def get_model():
+    global model, CLASS_NAMES
+    if model is None:
+        from ultralytics import YOLO
+        # use tiny default if no file; avoids downloading big models
+        model_path = os.getenv("MODEL_PATH", "yolov8n.pt")
+        model = YOLO(model_path)
+        CLASS_NAMES = model.names
+    return model
+
+@app.route("/api/ping")
+def ping():
+    return jsonify({"status": "ok"})
 
 @app.route("/api/detect", methods=["POST"])
 def detect():
-    """
-    multipart/form-data with field 'image'
-    returns: {"objects":[{"label":str,"confidence":float}], "counts": {"label": int, ...}}
-    """
-    if "image" not in request.files:
-        return jsonify({"error": "No file field 'image'"}), 400
+    try:
+        if "image" not in request.files:
+            return jsonify({"error": "No file field 'image'"}), 400
+        raw = request.files["image"].read()
+        if not raw:
+            return jsonify({"error": "Empty file"}), 400
 
-    f = request.files["image"]
-    if not f.filename:
-        return jsonify({"error": "Empty filename"}), 400
-
-    # Save to temp file for YOLO inference
-    with tempfile.NamedTemporaryFile(suffix=".jpg") as tmp:
-        f.save(tmp.name)
-
-        # Run model
-        results = model(tmp.name, device=DEVICE, conf=CONFIDENCE, imgsz=IMAGE_SIZE, verbose=False)
+        img = Image.open(io.BytesIO(raw)).convert("RGB")
+        m = get_model()
+        results = m.predict(img, device=DEVICE, conf=CONFIDENCE,
+                            imgsz=IMAGE_SIZE, verbose=False)
         r = results[0]
 
-        objects = []
-        counts = {}
+        objects, counts = [], {}
         if r.boxes is not None and len(r.boxes) > 0:
             cls = r.boxes.cls.detach().cpu().numpy().tolist()
             conf = r.boxes.conf.detach().cpu().numpy().tolist()
-
-            # sort by confidence desc
             for c, cf in sorted(zip(cls, conf), key=lambda x: x[1], reverse=True):
                 label = CLASS_NAMES.get(int(c), f"class_{int(c)}")
                 objects.append({"label": label, "confidence": float(cf)})
                 counts[label] = counts.get(label, 0) + 1
-
         return jsonify({"objects": objects, "counts": counts})
-
-@app.route("/api/ping")
-def ping():
-    return jsonify({"status": "ok", "device": DEVICE, "model": MODEL_PATH.name})
-
-if __name__ == "__main__":
-    print(f"Model: {MODEL_PATH} | device={DEVICE} | conf={CONFIDENCE} | imgsz={IMAGE_SIZE}")
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
