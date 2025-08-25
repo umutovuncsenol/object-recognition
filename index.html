@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>DIP • Digital Image Processor</title>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      font-family: Arial, sans-serif;
+      background-color: #f4f6f8;
+      color: #333;
+      text-align: center;
+    }
+
+    header {
+      background: #008080;
+      color: white;
+      padding: 20px;
+      border-radius: 20px;
+      width: 400px;
+      align-self: center;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      margin-top: 16px;
+    }
+
+    section {
+      flex: 1;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      align-items: center;
+    }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    button {
+      padding: 10px 15px;
+      font-size: 16px;
+      background: #20b2aa;
+      color: white;
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    button:hover { background: #006666; }
+
+
+    .analysis {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      width: min(1000px, 95%);
+      align-items: stretch;
+    }
+    @media (max-width: 800px) {
+      .analysis { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: #ffffff;
+      border: 1px solid #e5e5e5;
+      border-radius: 14px;
+      padding: 16px;
+      text-align: left;
+      min-height: 320px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+
+      display: flex;
+      flex-direction: column;
+    }
+    .panel h3 {
+      margin: 0 0 12px;
+      font-size: 18px;
+      color: #035e5e;
+    }
+
+    /* Image preview */
+    .preview-wrap {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #fafafa;
+        border: 1px dashed #cfd8dc;
+        border-radius: 10px;
+        min-height: 260px;
+        padding: 12px;
+        text-align: center;
+    }
+    img.preview {
+      max-width: 100%;
+      height: auto;
+      border-radius: 8px;
+      max-height: 500px;
+      object-fit: contain;
+    }
+
+    .results {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #fafafa;
+        border: 1px dashed #cfd8dc;
+        border-radius: 10px;
+        padding: 12px;
+        min-height: 260px;
+        white-space: pre-wrap;
+        line-height: 1.4;
+        text-align: center;
+    }
+    .muted { color: #666; }
+    .error { color: #b00020; }
+
+    .results ul {
+      margin: 0;
+      padding-left: 20px;
+      text-align: left;
+      list-style-type: disc;
+      width: 100%;
+      display: block;
+    }
+
+    footer {
+      background: #e0e0e0;
+      padding: 15px;
+      color: #444;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>DIP</h1>
+    <h2>Digital Image Processor</h2>
+    <p>Object Recognizer / Image Classifier</p>
+  </header>
+
+  <section>
+    <div class="controls">
+      <h2 style="margin:0;">Upload an image.</h2>
+      <button onclick="openPicker()">Upload</button>
+      <input id="fileInput" type="file" accept="image/*" style="display:none" />
+    </div>
+
+    <div class="analysis">
+      <div class="panel">
+        <h3>Uploaded Image</h3>
+        <div id="previewWrap" class="preview-wrap">
+          <span class="muted">No image uploaded yet.</span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Detected Objects</h3>
+        <div id="results" class="results">
+          <span class="muted">Results will appear here after upload.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p>XON Technology Inc.</p>
+  </footer>
+</body>
+
+<script>
+  const API = "http://127.0.0.1:5000/api/detect";
+  const fileInput = document.getElementById('fileInput');
+  const previewWrap = document.getElementById('previewWrap');
+  const resultsBox = document.getElementById('results');
+
+  function openPicker() {
+    fileInput.click();
+  }
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = () => {
+      previewWrap.innerHTML = '';
+      const img = document.createElement('img');
+      img.src = reader.result;
+      img.className = 'preview';
+      previewWrap.appendChild(img);
+    };
+    reader.readAsDataURL(file);
+
+    // Send file to backend
+    const fd = new FormData();
+    fd.append("image", file);
+
+    // Centered detecting message
+    resultsBox.innerHTML = "<span class='muted'>Detecting...</span>";
+    resultsBox.style.alignItems = "center";
+    resultsBox.style.justifyContent = "center";
+
+    fetch(API, { method: "POST", body: fd, mode: "cors" })
+      .then(async r => {
+        const text = await r.text();
+        try { return { ok: r.ok, data: JSON.parse(text) }; }
+        catch { throw new Error(`HTTP ${r.status} – ${text || 'non-JSON response'}`); }
+      })
+      .then(({ ok, data }) => {
+        resultsBox.innerHTML = "";
+
+        if (!ok) {
+          resultsBox.innerHTML = `<span class='error'>Error: ${JSON.stringify(data)}</span>`;
+          resultsBox.style.alignItems = "center";
+          resultsBox.style.justifyContent = "center";
+          return;
+        }
+
+        if (data.counts && Object.keys(data.counts).length > 0) {
+          const ul = document.createElement("ul");
+          ul.style.margin = 0;
+          ul.style.paddingLeft = "20px";
+          ul.style.textAlign = "left";
+
+          for (const [label, count] of Object.entries(data.counts)) {
+            const li = document.createElement("li");
+            li.textContent = `${label} × ${count}`;
+            ul.appendChild(li);
+          }
+
+          resultsBox.style.alignItems = "flex-start";
+          resultsBox.style.justifyContent = "flex-start";
+          resultsBox.appendChild(ul);
+        } else {
+          resultsBox.innerHTML = "<span class='muted'>No objects detected.</span>";
+          resultsBox.style.alignItems = "center";
+          resultsBox.style.justifyContent = "center";
+        }
+      })
+      .catch(err => {
+        resultsBox.innerHTML = `<span class='error'>Error: ${err.message}</span>`;
+        resultsBox.style.alignItems = "center";
+        resultsBox.style.justifyContent = "center";
+      });
+  });
+</script>
+
+</html>
