@@ -6,7 +6,7 @@ import tempfile
 import torch
 
 # ---------- Config ----------
-MODEL_PATH = Path("models/yolov10m.pt")
+MODEL_PATH = Path("yolov8n.pt")
 CONFIDENCE = 0.50
 IMAGE_SIZE = 640
 
