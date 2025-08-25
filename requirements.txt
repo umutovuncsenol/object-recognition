@@ -1,7 +1,14 @@
+# --- core pins (NumPy 1.x for torch 2.2.x) ---
+numpy==1.26.4
+
+# --- torch stack (CPU) ---
+torch==2.2.2
+torchvision==0.17.2
+
+# --- ultralytics + web ---
+ultralytics==8.3.33
 flask==3.0.3
 flask-cors==4.0.0
-ultralytics==8.3.33
-torch==2.2.2
 gunicorn==21.2.0
 pillow==10.3.0
 opencv-python-headless==4.9.0.80
