@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from PIL import Image
 import io, os
@@ -12,7 +12,8 @@ DEVICE = "cpu"
 torch.set_num_threads(1)
 os.environ["OMP_NUM_THREADS"] = "1"
 
-app = Flask(__name__)
+# Serve static files directly from the repo root (where index.html is)
+app = Flask(__name__, static_folder=".", static_url_path="")
 CORS(app)
 
 model = None
@@ -29,16 +30,24 @@ def get_model():
         CLASS_NAMES = model.names
     return model
 
-@app.route("/")
+# ----------------- STATIC / UI -----------------
+@app.get("/")
 def home():
-    return jsonify({"ok": True, "msg": "YOLO API running. Use /api/ping or POST /api/detect"})
+    # Serve your index.html at root
+    return app.send_static_file("index.html")
 
-@app.route("/api/ping")
+# If you add other assets later (css/js), this serves them automatically
+@app.get("/<path:filename>")
+def static_files(filename):
+    return send_from_directory(".", filename)
+
+# ----------------- API -----------------
+@app.get("/api/ping")
 def ping():
     loaded = model is not None
     return jsonify({"status": "ok", "model_loaded": loaded, "device": DEVICE})
 
-@app.route("/api/detect", methods=["POST"])
+@app.post("/api/detect")
 def detect():
     try:
         if "image" not in request.files:
