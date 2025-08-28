@@ -1,17 +1,6 @@
-# Core
-flask==3.0.3
-flask-cors==4.0.0
-gunicorn==21.2.0
-
-# ML / Vision
-torch==2.2.2
-torchvision==0.17.2
-ultralytics==8.3.33
-pillow==10.3.0
-opencv-python-headless==4.9.0.80
-
-# Utilities
-numpy<2        # IMPORTANT: avoid NumPy 2.x crash with torch
-scipy==1.16.1
-pandas==2.2.2
-matplotlib==3.8.4
+flask
+flask-cors
+ultralytics
+torch
+torchvision
+Pillow
