@@ -7,12 +7,10 @@ import torch
 import os
 import numpy as np
 
-# ---------- Config ----------
 MODEL_PATH = Path("yolov8n.pt")
 CONFIDENCE = 0.50
 IMAGE_SIZE = 640
 
-# Device selection
 if torch.backends.mps.is_available():
     DEVICE = "mps"
 elif torch.cuda.is_available():
@@ -20,20 +18,13 @@ elif torch.cuda.is_available():
 else:
     DEVICE = "cpu"
 
-# Production settings
 PORT = int(os.environ.get("PORT", 5000))
-HOST = "0.0.0.0"  # Allow external connections
+HOST = "0.0.0.0"
 DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 
-# Optional: limit uploads (10 MB)
-# app = Flask(__name__)
-# app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
-# ----------------------------
-
 app = Flask(__name__)
-CORS(app, origins=["*"])  # Configure CORS for production
+CORS(app, origins=["*"]) 
 
-# Load model once at startup
 try:
     model = YOLO(MODEL_PATH.as_posix())
     CLASS_NAMES = model.names
@@ -43,7 +34,6 @@ except Exception as e:
     model = None
     CLASS_NAMES = {}
 
-# Warm up the model (only if loaded)
 if model is not None:
     try:
         _ = model.predict(
@@ -53,7 +43,6 @@ if model is not None:
         print("Warmup done")
     except Exception as e:
         print("Warmup failed:", e)
-
 
 @app.route("/", methods=["GET"])
 def home():
@@ -281,7 +270,6 @@ def detect():
             cls = r.boxes.cls.detach().cpu().numpy().tolist()
             conf = r.boxes.conf.detach().cpu().numpy().tolist()
 
-            # sort by confidence desc
             for c, cf in sorted(zip(cls, conf), key=lambda x: x[1], reverse=True):
                 label = CLASS_NAMES.get(int(c), f"class_{int(c)}")
                 objects.append({"label": label, "confidence": float(cf)})
@@ -301,7 +289,6 @@ def detect():
             except Exception:
                 pass
 
-
 @app.route("/api/ping")
 def ping():
     return jsonify({
@@ -310,7 +297,6 @@ def ping():
         "model": MODEL_PATH.name,
         "model_loaded": model is not None
     })
-
 
 if __name__ == "__main__":
     print(f"Model: {MODEL_PATH} | device={DEVICE} | conf={CONFIDENCE} | imgsz={IMAGE_SIZE}")
