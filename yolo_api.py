@@ -155,14 +155,22 @@ def home():
           fileInput.click();
         }
 
-        // Optional: wake server early so first upload is faster
+        function pluralize(label, count) {
+          if (label === "person") return count === 1 ? "person" : "people";
+        
+          if (/s$|x$|z$|ch$|sh$/i.test(label)) {
+            return count === 1 ? label : label + "es";
+          }
+        
+          return count === 1 ? label : label + "s";
+        }
+
         fetch("/api/ping").catch(()=>{});
 
         fileInput.addEventListener('change', () => {
           const file = fileInput.files[0];
           if (!file) return;
 
-          // Preview
           const reader = new FileReader();
           reader.onload = () => {
             previewWrap.innerHTML = '';
@@ -173,16 +181,13 @@ def home():
           };
           reader.readAsDataURL(file);
 
-          // Build form
           const fd = new FormData();
           fd.append("image", file);
 
-          // UI: detecting…
           resultsBox.innerHTML = "<span class='muted'>Detecting...</span>";
           resultsBox.style.alignItems = "center";
           resultsBox.style.justifyContent = "center";
 
-          // Cancel any in-flight request
           if (controller) controller.abort();
           controller = new AbortController();
           const reqId = ++lastReq;
@@ -211,7 +216,7 @@ def home():
               const ul = document.createElement("ul");
               for (const [label, count] of Object.entries(data.counts)) {
                 const li = document.createElement("li");
-                li.textContent = `${count} ${label}`;
+                li.textContent = `${count} ${pluralize(label, count)}`;
                 ul.appendChild(li);
               }
               resultsBox.style.alignItems = "flex-start";
