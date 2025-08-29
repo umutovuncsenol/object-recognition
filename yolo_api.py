@@ -2,9 +2,11 @@ from pathlib import Path
 from flask import Flask, request, jsonify
 from ultralytics import YOLO
 from flask_cors import CORS
+from flask import make_response
 import tempfile
 import torch
 import os
+import numpy as np
 
 # ---------- Config ----------
 MODEL_PATH = Path("yolov8n.pt")
@@ -37,6 +39,20 @@ except Exception as e:
     print(f"Error loading model: {e}")
     model = None
     CLASS_NAMES = {}
+
+# add at top
+import numpy as np
+
+# right after the model loads successfully
+try:
+    # run a dummy forward pass to compile/warm caches
+    _ = model.predict(
+        source=np.zeros((IMAGE_SIZE, IMAGE_SIZE, 3), dtype=np.uint8),
+        device=DEVICE, conf=CONFIDENCE, imgsz=IMAGE_SIZE, verbose=False
+    )
+    print("Warmup done")
+except Exception as e:
+    print("Warmup failed:", e)
 
 @app.route("/", methods=["GET"])
 def home():
@@ -217,83 +233,89 @@ def home():
       </footer>
 
       <script>
-        // Use relative API path - will work on any domain
-        const API = "/api/detect";
-        const fileInput = document.getElementById('fileInput');
-        const previewWrap = document.getElementById('previewWrap');
-        const resultsBox = document.getElementById('results');
 
-        function openPicker() {
-          fileInput.click();
-        }
-
-        fileInput.addEventListener('change', () => {
-          const file = fileInput.files[0];
-          if (!file) return;
-
-          // Show preview
-          const reader = new FileReader();
-          reader.onload = () => {
-            previewWrap.innerHTML = '';
-            const img = document.createElement('img');
-            img.src = reader.result;
-            img.className = 'preview';
-            previewWrap.appendChild(img);
-          };
-          reader.readAsDataURL(file);
-
-          // Send file to backend
-          const fd = new FormData();
-          fd.append("image", file);
-
-          resultsBox.innerHTML = "<span class='muted'>Detecting...</span>";
-          resultsBox.style.alignItems = "center";
-          resultsBox.style.justifyContent = "center";
-
-          fetch(API, { method: "POST", body: fd })
+      function openPicker() {
+        document.getElementById('fileInput').click();
+      }
+  
+          const API = "/api/detect";
+            let lastReq = 0;
+            let controller = null;
+            
+            const fileInput  = document.getElementById('fileInput');
+            const previewWrap = document.getElementById('previewWrap');
+            const resultsBox  = document.getElementById('results');
+        
+          // optional: wake server early so first upload is fast
+          fetch("/api/ping").catch(()=>{});
+        
+          fileInput.addEventListener('change', () => {
+            const file = fileInput.files[0];
+            if (!file) return;
+        
+            // preview...
+            const reader = new FileReader();
+            reader.onload = () => {
+              previewWrap.innerHTML = '';
+              const img = document.createElement('img');
+              img.src = reader.result;
+              img.className = 'preview';
+              previewWrap.appendChild(img);
+            };
+            reader.readAsDataURL(file);
+        
+            // build form
+            const fd = new FormData();
+            fd.append("image", file);
+        
+            // UI: detecting…
+            resultsBox.innerHTML = "<span class='muted'>Detecting...</span>";
+            resultsBox.style.alignItems = "center";
+            resultsBox.style.justifyContent = "center";
+        
+            // cancel any in-flight request
+            if (controller) controller.abort();
+            controller = new AbortController();
+            const reqId = ++lastReq;
+        
+            fetch(`${API}?t=${Date.now()}`, {
+              method: "POST",
+              body: fd,
+              cache: "no-store",
+              signal: controller.signal
+            })
             .then(async r => {
               const text = await r.text();
               try { return { ok: r.ok, data: JSON.parse(text) }; }
               catch { throw new Error(`HTTP ${r.status} – ${text || 'non-JSON response'}`); }
             })
             .then(({ ok, data }) => {
+              if (reqId !== lastReq) return;               // ignore stale responses
               resultsBox.innerHTML = "";
-
               if (!ok) {
                 resultsBox.innerHTML = `<span class='error'>Error: ${JSON.stringify(data)}</span>`;
-                resultsBox.style.alignItems = "center";
-                resultsBox.style.justifyContent = "center";
                 return;
               }
-
-              if (data.counts && Object.keys(data.counts).length > 0) {
+              if (data.counts && Object.keys(data.counts).length) {
                 const ul = document.createElement("ul");
-                ul.style.margin = 0;
-                ul.style.paddingLeft = "20px";
-                ul.style.textAlign = "left";
-
                 for (const [label, count] of Object.entries(data.counts)) {
                   const li = document.createElement("li");
                   li.textContent = `${label} × ${count}`;
                   ul.appendChild(li);
                 }
-
                 resultsBox.style.alignItems = "flex-start";
                 resultsBox.style.justifyContent = "flex-start";
                 resultsBox.appendChild(ul);
               } else {
                 resultsBox.innerHTML = "<span class='muted'>No objects detected.</span>";
-                resultsBox.style.alignItems = "center";
-                resultsBox.style.justifyContent = "center";
               }
             })
             .catch(err => {
+              if (err.name === "AbortError" || reqId !== lastReq) return; // ignore
               resultsBox.innerHTML = `<span class='error'>Error: ${err.message}</span>`;
-              resultsBox.style.alignItems = "center";
-              resultsBox.style.justifyContent = "center";
             });
-        });
-      </script>
+          });
+        </script>
     </body>
     </html>
     """
@@ -339,10 +361,10 @@ def detect():
             # Clean up temp file
             os.unlink(tmp.name)
             
-        return jsonify({"objects": objects, "counts": counts})
-    
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        resp = make_response(jsonify({"objects": objects, "counts": counts}))
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        resp.headers["Pragma"] = "no-cache"
+        return resp
 
 @app.route("/api/ping")
 def ping():
