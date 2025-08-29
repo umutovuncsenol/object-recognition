@@ -211,7 +211,7 @@ def home():
               const ul = document.createElement("ul");
               for (const [label, count] of Object.entries(data.counts)) {
                 const li = document.createElement("li");
-                li.textContent = `${label} × ${count}`;
+                li.textContent = `${count} ${label}`;
                 ul.appendChild(li);
               }
               resultsBox.style.alignItems = "flex-start";
